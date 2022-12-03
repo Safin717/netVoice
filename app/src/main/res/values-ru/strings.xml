@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">Голосовой помощник netVoice</string>
+    <string name="action_stop_title">Остановить</string>
+    <string name="action_clear_title">Очистить</string>
+    <string name="request_hint">Что вас интересует?</string>
+    <string name="error_do_not_understand">Извините, я не понимаю, можете перефразировать?</string>
+    <string name="error_voice_recognition_unavailable">Распознавание голоса недоступно</string>
+    <string name="error_something_went_wrong">Что-то пошло не так</string>
+    <string name="error_tts_is_not_ready">TTS не готов</string>
+</resources>

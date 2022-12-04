@@ -1,20 +1,31 @@
 package com.bysafmobile.netvoice
 
 import android.annotation.SuppressLint
+import android.app.ProgressDialog.show
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
+import android.view.inputmethod.EditorInfo
 import android.widget.ListView
 import android.widget.ProgressBar
 import android.widget.SimpleAdapter
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
+import com.wolfram.alpha.WAEngine
+import com.wolfram.alpha.WAPlainText
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
     val TAG: String = "MainActivity"
+    lateinit var waEngine: WAEngine
 
     // переменная для текстового поля
     lateinit var requestInput: TextInputEditText
@@ -24,29 +35,13 @@ class MainActivity : AppCompatActivity() {
     lateinit var progress_bar: ProgressBar
 
     // список с данными для адаптера
-    val pods = mutableListOf<HashMap<String, String>>(
-        HashMap<String, String>().apply {
-            put("title", "title1")
-            put("context", "context1")
-        },
-        HashMap<String, String>().apply {
-            put("title", "title2")
-            put("context", "context2")
-        },
-        HashMap<String, String>().apply {
-            put("title", "title3")
-            put("context", "context3")
-        },
-        HashMap<String, String>().apply {
-            put("title", "title4")
-            put("context", "context4")
-        }
-    )
+    val pods = mutableListOf<HashMap<String, String>>()
         @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         initViews()
+        wolframEngine()
     }
     // подключаем свой созданный toolbar
     fun initViews(){
@@ -55,13 +50,23 @@ class MainActivity : AppCompatActivity() {
         setSupportActionBar(toolbar)
 
         requestInput = findViewById(R.id.text_input_edit)
+        requestInput.setOnEditorActionListener { textView, i, keyEvent ->
+            if (i == EditorInfo.IME_ACTION_DONE){
+                pods.clear()
+                podsAdapter.notifyDataSetChanged()
+
+                val question = requestInput.text.toString()
+                askWolfram(question)
+            }
+            return@setOnEditorActionListener false
+        }
 
         val podsList: ListView = findViewById(R.id.pods_list)
         podsAdapter = SimpleAdapter(
             applicationContext,
             pods,
             R.layout.item_pod,
-            arrayOf("title", "context"),
+            arrayOf("Title", "Content"),
             intArrayOf(R.id.title, R.id.context)
         )
         podsList.adapter = podsAdapter
@@ -88,10 +93,78 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
             R.id.action_clear ->{
-                Log.d(TAG, "action clear")
+                requestInput.text?.clear()
+                pods.clear()
+                podsAdapter.notifyDataSetChanged()
                 return true
             }
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    fun wolframEngine(){
+        waEngine = WAEngine().apply {
+            appID = "KWPK6P-XPKWLP6VP8"
+            addFormat("plaintext")
+        }
+    }
+    fun showSnackBar(message:String){
+        Snackbar.make(findViewById(android.R.id.content), message, Snackbar.LENGTH_INDEFINITE).apply {
+            setAction(android.R.string.ok){
+                dismiss()
+            }
+            show()
+        }
+    }
+    fun askWolfram(request:String){
+        //отображаем progress_bar
+        progress_bar.visibility = View.VISIBLE
+        // запускаем корутину на второстепенном потоке
+        CoroutineScope(Dispatchers.IO).launch {
+            // создаем запрос
+            val query = waEngine.createQuery().apply { input = request }
+            runCatching {
+                waEngine.performQuery(query)
+            }.onSuccess { result ->
+                // возвращаем результат на основной поток
+                withContext(Dispatchers.Main){
+                    progress_bar.visibility = View.GONE
+                    // если результат с ошибкой, то выведем в сообщении SnackBar
+                    if (result.isError){
+                        showSnackBar(result.errorMessage)
+                        return@withContext
+                    }
+                    // неизвестные ошибки: некорректный ввод пользователя
+                    if(!result.isSuccess){
+                        requestInput.error = getString(R.string.error_do_not_understand)
+                        return@withContext
+                    }
+
+                    for (pod in result.pods){
+                        if(pod.isError) continue
+                        val content = StringBuilder()
+                        for (subpod in pod.subpods){
+                            for(element in subpod.contents){
+                                if(element is WAPlainText){
+                                    content.append(element.text)
+                                }
+                            }
+                        }
+                        pods.add(0, HashMap<String, String>().apply {
+                            put("Title", pod.title)
+                            put("Content", content.toString())
+                        })
+                    }
+                    podsAdapter.notifyDataSetChanged()
+                }
+            }.onFailure { t ->
+                // возвращаем результат на основной поток
+                withContext(Dispatchers.Main){
+                    progress_bar.visibility = View.GONE
+                    // выводим сообщение SnackBar об ошибке
+                    showSnackBar(t.message ?: getString(R.string.error_something_went_wrong))
+                }
+            }
+        }
     }
 }

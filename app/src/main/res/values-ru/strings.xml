@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="app_name">Голосовой помощник netVoice</string>
+    <string name="app_name">Ваш ассистент netVoice</string>
     <string name="action_stop_title">Остановить</string>
     <string name="action_clear_title">Очистить</string>
     <string name="request_hint">Что вас интересует?</string>
